@@ -227,6 +227,12 @@ class AddressSpaceAllocator(object):
         self._symbols = {}
         self._regions = {}
 
+    def __repr__(self):
+        return str(self.name)
+
+    def get_symbols(self):
+        return self._symbols
+
     def add_symbol_with_caps(self, symbol, sizes, caps):
         '''
         Specify the caps and sizes to use for a given symbol.  Objects that the

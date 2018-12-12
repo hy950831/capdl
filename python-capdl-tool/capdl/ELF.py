@@ -46,12 +46,14 @@ class ELF(object):
         parameter 'elf', or a stream to ELF data. 'name' is only used when
         generating CapDL from the ELF file.
         """
+
         if isinstance(elf, six.string_types):
             f = open(elf, 'rb')
         else:
             f = elf
         self._elf = ELFFile(f)
         self.name = name
+        # symbol table
         self._symtab = None
         self.arch = arch or self.get_arch()
 
@@ -132,9 +134,16 @@ class ELF(object):
         # We assume that this array contains aligned vaddrs and sizes that are frame sizes
         existing_pages = []
         if addr_space:
+
+            for (symbol, (sizes, caps)) in addr_space.get_symbols().iteritems():
+                print(symbol)
+                print(sizes)
+                print(caps)
             # Update symbols with their vaddrs in the AddressSpaceAllocator if we were given one
             existing_pages = [(self.get_symbol_vaddr(symbol), sizes, caps)
                  for (symbol, (sizes, caps)) in addr_space.get_symbols_and_clear().iteritems()]
+
+            print('existing pages are : ' + str(existing_pages))
             self.check_alignment(existing_pages)
             for (vaddr, sizes, caps) in existing_pages:
                 addr_space.add_region_with_caps(vaddr, sizes, caps)

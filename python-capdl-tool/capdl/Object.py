@@ -229,6 +229,13 @@ class Notification(Object):
     def __repr__(self):
         return '%s = notification' % self.name
 
+#  class SharedLib(Object):
+    #  def __repr__(self):
+        #  return '%s = shared_lib' % self.name
+
+    #  def __init__(self, name, elf=None):
+        #  self.name = name
+
 class TCB(ContainerObject):
     def __init__(self, name, ipc_buffer_vaddr=0x0, ip=0x0, sp=0x0, elf=None,
             prio=254, max_prio=254, affinity=0, init=None, domain=None, fault_ep_slot=None):

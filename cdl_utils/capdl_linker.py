@@ -31,31 +31,63 @@ def manifest(cap_symbols, region_symbols, architecture, targets):
     """
     Generates a c file from CSPACE_TEMPLATE_FILE with some runtime information
     about CSpace slots and special address ranges
+
+    NOTE: the generated file is depended staticly compiled sel4 kernel,
+    hence it's not directly usable for dynamic linking purpose
     """
     temp_file = open(CSPACE_TEMPLATE_FILE, 'r').read()
     template = Environment(loader=BaseLoader).from_string(temp_file)
+    # TODO: handle shared lib elf files
 
+    print("In manifest function")
     for (e, ccspace) in targets:
+        print(e)
+        print(ccspace)
         name = os.path.basename(e)
+
         if ccspace:
-            data = template.render({'slots': cap_symbols[name], 'symbols': region_symbols[name], 'progname': name, 'ipc_buffer_symbol': "mainIpcBuffer"})
+            data = template.render({'slots': cap_symbols[name],
+                                    'symbols': region_symbols[name],
+                                    'progname': name,
+                                    'ipc_buffer_symbol': "mainIpcBuffer"})
             ccspace.write(data)
 
 def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture):
     """
     Generates a final CapDL spec file that can be given to a capdl loader application
     """
+
+    # cspaces : dict containes all the CSpaceAllocator for this app
+    # obj_space : ObjectAllocator for all the objs in the spec
+    # addr_spaces : dict containers all the AddressSpaceAllocator for this app
+
+    print("In final_spec function")
     arch = lookup_architecture(architecture)
 
     for e in [item for sublist in elf_files for item in sublist]:
+        # FIXME: handle shared lib elf files
         name = os.path.basename(e)
+        print(name)
+
+        # path, name, arch
         elf = ELF(e, name, architecture)
+
+        # find the cspace for current elf
         cspace = cspaces[name]
 
+        print('the vspace root is ' + str(addr_spaces[name].vspace_root))
+        print('The addr space allocator is ' + str(addr_spaces[name]))
+
         # Avoid inferring a TCB as we've already created our own.
-        elf_spec = elf.get_spec(infer_tcb=False, infer_asid=False,pd=addr_spaces[name].vspace_root, addr_space=addr_spaces[name])
+        elf_spec = elf.get_spec(
+            infer_tcb=False,
+            infer_asid=False,
+            pd=addr_spaces[name].vspace_root,
+            addr_space=addr_spaces[name]
+            )
         obj_space.merge(elf_spec)
         cspace.cnode.finalise_size(arch)
+
 
         # Fill in TCB object information.
         # TODO: This should be generalised with what is in the Camkes filters
@@ -97,6 +129,10 @@ def main():
         return 0
 
     if args.which is "gen_cdl":
+
+        # cspaces : dict containes all the CSpaceAllocator for this app
+        # objects : ObjectAllocator for all the objs in the spec
+        # addr_spaces : dict containers all the AddressSpaceAllocator for this app
         obj_space = final_spec(cspaces, objects, addr_spaces, args.elffile, args.architecture)
         args.outfile.write(repr(obj_space.spec))
 

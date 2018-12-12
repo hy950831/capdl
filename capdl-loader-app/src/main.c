@@ -74,7 +74,7 @@ extern char _end[];
  * frame of bootinfo. So we skip three frames and then round up
  * to the next 16mb alignment where we can map in a pagetable.
  */
-#define copy_addr ( ROUND_UP(((uintptr_t)_end) + (PAGE_SIZE_4K * 3), 0x1000000))
+#define copy_addr (ROUND_UP(((uintptr_t)_end) + (PAGE_SIZE_4K * 3), 0x1000000))
 
 /* In the case where we just want a 4K page and we cannot allocate
  * a page table ourselves, we use this pre allocated region that
@@ -1241,6 +1241,9 @@ init_elfs(CDL_Model *spec, seL4_BootInfo *bootinfo)
         ZF_LOGD("  %d: %s, offset: %p, size: %lu\n", j, name,
                 (void*)((uintptr_t)ptr - (uintptr_t)_capdl_archive), size);
     }
+
+    // TODO: handle shared lib elfs here
+    // TODO: resolve symbol table issue here
     for (CDL_ObjID obj_id = 0; obj_id < spec->num; obj_id++) {
         if (spec->objects[obj_id].type == CDL_TCB) {
             ZF_LOGD(" Initialising ELF for %s...\n", CDL_Obj_Name(&spec->objects[obj_id]));
