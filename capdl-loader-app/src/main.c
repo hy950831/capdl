@@ -1867,6 +1867,8 @@ init_system(CDL_Model *spec)
 
     init_irqs(spec);
     init_pd_asids(spec);
+    // TODO: Handle shared object elfs in init_elfs function
+    // (MAYBE: keep track of a big symbol table)
     init_elfs(spec, bootinfo);
     init_fill_frames(spec, &simple);
     init_vspace(spec);
@@ -1882,6 +1884,7 @@ main(void)
 #ifdef CONFIG_DEBUG_BUILD
     /* Allow us to print via seL4_Debug_PutChar. */
     platsupport_serial_setup_bootinfo_failsafe();
+    ZF_LOGD("Set up serial\n");
 #endif
 
     ZF_LOGD("Starting Loader...\n");

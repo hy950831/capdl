@@ -37,8 +37,8 @@ def manifest(cap_symbols, region_symbols, architecture, targets):
     """
     temp_file = open(CSPACE_TEMPLATE_FILE, 'r').read()
     template = Environment(loader=BaseLoader).from_string(temp_file)
-    # TODO: handle shared lib elf files
 
+    # TODO: handle shared lib so files
     print("In manifest function")
     for (e, ccspace) in targets:
         print(e)
@@ -52,7 +52,9 @@ def manifest(cap_symbols, region_symbols, architecture, targets):
                                     'ipc_buffer_symbol': "mainIpcBuffer"})
             ccspace.write(data)
 
-def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture):
+
+
+def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture, so_files):
     """
     Generates a final CapDL spec file that can be given to a capdl loader application
     """
@@ -60,12 +62,24 @@ def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture):
     # cspaces : dict containes all the CSpaceAllocator for this app
     # obj_space : ObjectAllocator for all the objs in the spec
     # addr_spaces : dict containers all the AddressSpaceAllocator for this app
-
     print("In final_spec function")
     arch = lookup_architecture(architecture)
 
+    # FIXME: handle shared lib so files here
+    for e in [item for sublist in so_files for item in sublist]:
+        name = os.path.basename(e)
+        print(name)
+
+        elf = ELF(e, name, architecture)
+
+        cspace = cspaces[name]
+
+        # TODO: There shouldn't be a tcb for a shared lib file
+        # TODO: Think about how to load the so file into a frame and map
+        # the frame into the processes which need the so lib
+
+
     for e in [item for sublist in elf_files for item in sublist]:
-        # FIXME: handle shared lib elf files
         name = os.path.basename(e)
         print(name)
 
@@ -87,7 +101,6 @@ def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture):
             )
         obj_space.merge(elf_spec)
         cspace.cnode.finalise_size(arch)
-
 
         # Fill in TCB object information.
         # TODO: This should be generalised with what is in the Camkes filters
@@ -118,6 +131,7 @@ def main():
     parser_b.set_defaults(which="gen_cdl")
     parser_b.add_argument('--manifest-in', type=argparse.FileType('rb'))
     parser_b.add_argument('--elffile', nargs='+', action='append')
+    parser_b.add_argument('--sofile', nargs='+', action='append')
     args = parser.parse_args()
 
     (objects, cspaces, addr_spaces, cap_symbols, region_symbols, elfs) = pickle.load(args.manifest_in)
@@ -129,11 +143,12 @@ def main():
         return 0
 
     if args.which is "gen_cdl":
-
+        print("shared lib passed in :")
+        print(args.sofile)
         # cspaces : dict containes all the CSpaceAllocator for this app
         # objects : ObjectAllocator for all the objs in the spec
         # addr_spaces : dict containers all the AddressSpaceAllocator for this app
-        obj_space = final_spec(cspaces, objects, addr_spaces, args.elffile, args.architecture)
+        obj_space = final_spec(cspaces, objects, addr_spaces, args.elffile, args.architecture, args.sofile)
         args.outfile.write(repr(obj_space.spec))
 
     return 0
