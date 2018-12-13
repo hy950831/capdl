@@ -68,6 +68,7 @@ def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture, so_file
     # FIXME: handle shared lib so files here
     for e in [item for sublist in so_files for item in sublist]:
         name = os.path.basename(e)
+        name = name[3:-3]
         print(name)
 
         elf = ELF(e, name, architecture)
@@ -77,6 +78,29 @@ def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture, so_file
         # TODO: There shouldn't be a tcb for a shared lib file
         # TODO: Think about how to load the so file into a frame and map
         # the frame into the processes which need the so lib
+        print('the vspace root is ' + str(addr_spaces[name].vspace_root))
+        print('The addr space allocator is ' + str(addr_spaces[name]))
+
+        # Avoid inferring a TCB as we've already created our own.
+        elf_spec = elf.get_spec(
+            infer_tcb=False,
+            infer_asid=False,
+            pd=addr_spaces[name].vspace_root,
+            addr_space=addr_spaces[name]
+            )
+
+        obj_space.merge(elf_spec)
+        cspace.cnode.finalise_size(arch)
+
+        # Fill in TCB object information.
+        # TODO: This should be generalised with what is in the Camkes filters
+        tcb = obj_space["tcb_%s" % name]
+        progsymbol = 0
+        vsyscall = 0
+        tcb.init = [0,0,0,0,2,progsymbol,1,0,0,32,vsyscall,0,0]
+        tcb.addr = 0
+        tcb.sp = 0
+        tcb.ip = 0
 
 
     for e in [item for sublist in elf_files for item in sublist]:

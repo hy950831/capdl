@@ -1867,8 +1867,8 @@ init_system(CDL_Model *spec)
 
     init_irqs(spec);
     init_pd_asids(spec);
+
     // TODO: Handle shared object elfs in init_elfs function
-    // (MAYBE: keep track of a big symbol table)
     init_elfs(spec, bootinfo);
     init_fill_frames(spec, &simple);
     init_vspace(spec);

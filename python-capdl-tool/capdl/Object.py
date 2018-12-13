@@ -266,6 +266,9 @@ class TCB(ContainerObject):
             fields += ['fault_ep: 0x%(fault_ep_slot)0.8x']
         if self.domain is not None:
             fields += ['dom: %(domain)d']
+
+        print(self.__dict__)
+
         return ('%(name)s = tcb (' + ','.join(fields) + ')') % self.__dict__
 
     def set_affinity(self, affinity):
