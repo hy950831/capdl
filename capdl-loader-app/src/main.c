@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <dlfcn.h>
 #include <elf/elf.h>
 #include <sel4platsupport/platsupport.h>
 #include <cpio/cpio.h>
@@ -187,6 +188,7 @@ get_cap_at(CDL_Object *obj, unsigned int slot)
 #ifdef CONFIG_ARCH_X86_64
 static CDL_Cap *get_cdl_frame_pdpt(CDL_ObjID root, uintptr_t vaddr, CDL_Model *spec)
 {
+    ZF_LOGD("find %x\n", vaddr);
     CDL_Object *cdl_pml4 = get_spec_object(spec, root);
     CDL_Cap *pdpt_cap = get_cap_at(cdl_pml4, PML4_SLOT(vaddr));
     if (pdpt_cap == NULL) {
@@ -1885,6 +1887,10 @@ main(void)
     /* Allow us to print via seL4_Debug_PutChar. */
     platsupport_serial_setup_bootinfo_failsafe();
     ZF_LOGD("Set up serial\n");
+    void* handle = dlopen("libshared.so", RTLD_NOW);
+    if (handle == NULL) {
+        ZF_LOGD("FAILED to load the shared lib\n");
+    }
 #endif
 
     ZF_LOGD("Starting Loader...\n");
