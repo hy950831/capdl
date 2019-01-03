@@ -1207,10 +1207,30 @@ init_tcbs(CDL_Model *spec)
     for (CDL_ObjID obj_id = 0; obj_id < spec->num; obj_id++) {
         if (spec->objects[obj_id].type == CDL_TCB) {
             ZF_LOGD(" Initialising %s...\n", CDL_Obj_Name(&spec->objects[obj_id]));
+            const char* name_curr_tcb = CDL_Obj_Name(&spec->objects[obj_id]);
+
+            char safename[10];
+            int i;
+            for (i = 4; i < 10; ++i) {
+                safename[i - 4] = name_curr_tcb[i];
+            }
+            safename[i - 4] = '\0';
+
+            ZF_LOGD("name is %s\n", safename);
+
+            int flag = 1;
+            int cmp = strcmp("shared", safename);
+            ZF_LOGD("cmp is %d\n", cmp);
+
             init_tcb(spec, obj_id);
 
             ZF_LOGD(" Configuring %s...\n", CDL_Obj_Name(&spec->objects[obj_id]));
-            configure_tcb(spec, obj_id);
+
+            if(cmp == 0) {
+                // TODO: write a configure tcb function specially for shared libs
+            } else {
+                configure_tcb(spec, obj_id);
+            }
         }
     }
 }
