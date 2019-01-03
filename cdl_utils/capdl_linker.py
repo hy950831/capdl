@@ -26,6 +26,8 @@ from capdl import ELF, lookup_architecture
 
 CSPACE_TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), "templates/cspace.template.c")
 
+SO_CSPACE_TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), "templates/cspace.so.template.c")
+
 
 def manifest(cap_symbols, region_symbols, architecture, targets):
     """
@@ -38,7 +40,6 @@ def manifest(cap_symbols, region_symbols, architecture, targets):
     temp_file = open(CSPACE_TEMPLATE_FILE, 'r').read()
     template = Environment(loader=BaseLoader).from_string(temp_file)
 
-    # TODO: handle shared lib so files
     print("In manifest function")
     for (e, ccspace) in targets:
         print(e)
@@ -47,6 +48,29 @@ def manifest(cap_symbols, region_symbols, architecture, targets):
 
         if ccspace:
             data = template.render({'slots': cap_symbols[name],
+                                    'symbols': region_symbols[name],
+                                    'progname': name,
+                                    'ipc_buffer_symbol': "mainIpcBuffer"})
+            ccspace.write(data)
+
+
+def so_manifest(cap_symbols, region_symbols, architecture, targets):
+    """
+    Generates a c file from CSPACE_TEMPLATE_FILE with some runtime information
+    about CSpace slots and special address ranges
+    """
+    so_temp_file = open(SO_CSPACE_TEMPLATE_FILE, 'r').read()
+    so_template = Environment(loader=BaseLoader).from_string(so_temp_file)
+
+    # TODO: handle shared lib so files
+    print("In so_manifest function")
+    for (e, ccspace) in targets:
+        print(e)
+        print(ccspace)
+        name = os.path.basename(e)[3:-3]
+
+        if ccspace:
+            data = so_template.render({
                                     'symbols': region_symbols[name],
                                     'progname': name,
                                     'ipc_buffer_symbol': "mainIpcBuffer"})
@@ -150,12 +174,20 @@ def main():
     parser_a.set_defaults(which="build_cnode")
     parser_a.add_argument('--manifest-in', type=argparse.FileType('rb'))
     parser_a.add_argument('--elffile', nargs='+', action='append')
+
     parser_b = subparsers.add_parser('gen_cdl')
     parser_b.add_argument('--outfile', type=argparse.FileType('w'))
     parser_b.set_defaults(which="gen_cdl")
     parser_b.add_argument('--manifest-in', type=argparse.FileType('rb'))
     parser_b.add_argument('--elffile', nargs='+', action='append')
     parser_b.add_argument('--sofile', nargs='+', action='append')
+
+    parser_c = subparsers.add_parser('build_so_cnode')
+    parser_c.set_defaults(which="build_so_cnode")
+    parser_c.add_argument('--manifest-in', type=argparse.FileType('rb'))
+    parser_c.add_argument('--sofile', nargs='+', action='append')
+    parser_c.add_argument('--socspace', nargs='+', type=argparse.FileType('w'), action='append')
+
     args = parser.parse_args()
 
     (objects, cspaces, addr_spaces, cap_symbols, region_symbols, elfs) = pickle.load(args.manifest_in)
@@ -164,6 +196,16 @@ def main():
         cspaces = [item for sublist in args.ccspace for item in sublist]
         targets = zip(elfs, cspaces)
         manifest(cap_symbols, region_symbols, args.architecture, targets)
+        return 0
+
+    if args.which is "build_so_cnode":
+        print("shared lib passed in :")
+        print(args.sofile)
+        sos = [item for sublist in args.sofile for item in sublist]
+        so_cspaces = [item for sublist in args.socspace for item in sublist]
+
+        so_targets = zip(sos, so_cspaces)
+        so_manifest(cap_symbols, region_symbols, args.architecture, so_targets)
         return 0
 
     if args.which is "gen_cdl":

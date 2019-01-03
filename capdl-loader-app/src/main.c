@@ -1244,6 +1244,7 @@ init_elfs(CDL_Model *spec, seL4_BootInfo *bootinfo)
                 (void*)((uintptr_t)ptr - (uintptr_t)_capdl_archive), size);
     }
 
+
     // TODO: handle shared lib elfs here
     // TODO: resolve symbol table issue here
     for (CDL_ObjID obj_id = 0; obj_id < spec->num; obj_id++) {
