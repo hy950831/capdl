@@ -20,10 +20,13 @@
 #include <string.h>
 #include <stdint.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <elf/elf.h>
 #include <sel4platsupport/platsupport.h>
 #include <cpio/cpio.h>
 #include <simple-default/simple-default.h>
+
+#include <muslcsys/io.h>
 
 #include <vka/kobject_t.h>
 #include <utils/util.h>
@@ -361,6 +364,20 @@ void init_copy_frame(seL4_BootInfo *bootinfo)
     }
 }
 
+typedef struct shared_lib_frame {
+    CDL_ObjID pd;
+    void* elf_file;
+    unsigned long elf_size;
+    uintptr_t dest;
+    uintptr_t src;
+    seL4_CPtr sel4_page;
+    seL4_CPtr sel4_page_pt;
+    seL4_CPtr sel4_page_size;
+} shared_lib_frame_t;
+
+shared_lib_frame_t shared_frames[10];
+int num_shared_frames = 0;
+
 static void
 elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
                 seL4_BootInfo *bootinfo)
@@ -383,7 +400,9 @@ elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
 
         size_t f_len = elf_getProgramHeaderFileSize(elf_file, i);
         uintptr_t dest = elf_getProgramHeaderVaddr(elf_file, i);
+
         uintptr_t src = (uintptr_t) elf_file + elf_getProgramHeaderOffset(elf_file, i);
+
 
         //Skip non loadable headers
         if (elf_getProgramHeaderType(elf_file, i) != PT_LOAD) {
@@ -400,13 +419,28 @@ elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
             seL4_CPtr sel4_page_pt = get_frame_pt(pd, vaddr, spec);
             size_t sel4_page_size = get_frame_size(pd, vaddr, spec);
 
+
+            if(dest == 0x1000) {
+                ZF_LOGD("vaddr is 0x1000");
+                shared_frames[num_shared_frames].pd = pd;
+                shared_frames[num_shared_frames].elf_file = elf_file;
+                shared_frames[num_shared_frames].elf_size = elf_size;
+                shared_frames[num_shared_frames].dest = dest;
+                shared_frames[num_shared_frames].src = src;
+                shared_frames[num_shared_frames].sel4_page = sel4_page;
+                shared_frames[num_shared_frames].sel4_page_pt = sel4_page_pt;
+                shared_frames[num_shared_frames].sel4_page_size = sel4_page_size;
+            }
+
             seL4_ARCH_VMAttributes attribs = seL4_ARCH_Default_VMAttributes;
 #ifdef CONFIG_ARCH_ARM
             attribs |= seL4_ARM_ExecuteNever;
 #endif
 
+            // map the target thread's frame into root task's address space
             int error = seL4_ARCH_Page_Map(sel4_page, seL4_CapInitThreadPD, (seL4_Word)copy_addr,
                                            seL4_ReadWrite, attribs);
+
             if (error == seL4_FailedLookup) {
                 error = seL4_ARCH_PageTable_Map(sel4_page_pt, seL4_CapInitThreadPD, (seL4_Word)copy_addr,
                                                 seL4_ARCH_Default_VMAttributes);
@@ -414,6 +448,7 @@ elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
                 error = seL4_ARCH_Page_Map(sel4_page, seL4_CapInitThreadPD, (seL4_Word)copy_addr,
                                            seL4_ReadWrite, attribs);
             }
+
             if (error) {
                 /* Try and retrieve some useful information to help the user
                  * diagnose the error.
@@ -431,6 +466,13 @@ elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
 
             /* copy until end of section or end of page */
             size_t len = dest + f_len - vaddr;
+
+            if(dest == 0x1000) {
+            ZF_LOGD("Len is %x", len);
+            ZF_LOGD("vaddr is %x", vaddr);
+            ZF_LOGD("flen is %x", f_len);
+            ZF_LOGD("dest is %x", dest);
+            }
             if (len > sel4_page_size - (vaddr % sel4_page_size)) {
                 len = sel4_page_size - (vaddr % sel4_page_size);
             }
@@ -1201,6 +1243,13 @@ configure_tcb(CDL_Model *spec, CDL_ObjID tcb)
 }
 
 static void
+configure_so_tcb(CDL_Model *spec, CDL_ObjID tcb)
+{
+    ZF_LOGD("Initialise shared object tcb\n");
+}
+
+
+static void
 init_tcbs(CDL_Model *spec)
 {
     ZF_LOGD("Initialising TCBs...\n");
@@ -1217,8 +1266,6 @@ init_tcbs(CDL_Model *spec)
             safename[i - 4] = '\0';
 
             ZF_LOGD("name is %s\n", safename);
-
-            int flag = 1;
             int cmp = strcmp("shared", safename);
             ZF_LOGD("cmp is %d\n", cmp);
 
@@ -1228,6 +1275,7 @@ init_tcbs(CDL_Model *spec)
 
             if(cmp == 0) {
                 // TODO: write a configure tcb function specially for shared libs
+                configure_so_tcb(spec, obj_id);
             } else {
                 configure_tcb(spec, obj_id);
             }
@@ -1235,18 +1283,125 @@ init_tcbs(CDL_Model *spec)
     }
 }
 
+CDL_ObjID program_2_tcb;
+seL4_CPtr program_2_pd_dup;
+CDL_ObjID program_2_pd;
+
+CDL_ObjID shared_lib_tcb;
+seL4_CPtr shared_lib_pd_dup;
+CDL_ObjID shared_lib_pd;
+
 static void
 init_elf(CDL_Model *spec, CDL_ObjID tcb, seL4_BootInfo *bootinfo)
 {
     CDL_Object *cdl_tcb = get_spec_object(spec, tcb);
 
     CDL_Cap *cdl_vspace_root = get_cap_at(cdl_tcb, CDL_TCB_VTable_Slot);
+
+    const char* name = CDL_Obj_Name(cdl_tcb);
+
+    if(strcmp(name, "tcb_program_2") == 0) {
+        ZF_LOGD("It's program2, save the info needed for loading the shared libs");
+        program_2_tcb = tcb;
+        program_2_pd = CDL_Cap_ObjID(cdl_vspace_root);
+        program_2_pd_dup = dup_caps(program_2_pd);
+    }
+
+    if(strcmp(name, "tcb_shared") == 0) {
+        ZF_LOGD("It's shared_lib, save the info needed for loading the shared libs");
+        shared_lib_tcb = tcb;
+        shared_lib_pd = CDL_Cap_ObjID(cdl_vspace_root);
+        shared_lib_pd_dup = dup_caps(shared_lib_pd);
+    }
+
+    ZF_LOGD("Init(Load) elf for %s", CDL_Obj_Name(cdl_tcb));
     if (cdl_vspace_root == NULL) {
         ZF_LOGF("Could not find VSpace cap for %s", CDL_Obj_Name(cdl_tcb));
     }
 
     elf_load_frames(CDL_TCB_ElfName(cdl_tcb), CDL_Cap_ObjID(cdl_vspace_root), spec, bootinfo);
 }
+
+static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL4_Word to_vaddr, seL4_Word from_vaddr, unsigned long size) {
+    CDL_Object* cdl_tcb_to = get_spec_object(spec, tcb_to);
+    CDL_Cap *to_vspace_root = get_cap_at(cdl_tcb_to, CDL_TCB_VTable_Slot);
+    CDL_ObjID to_pd = CDL_Cap_ObjID(to_vspace_root);
+
+    CDL_Object* cdl_tcb_from = get_spec_object(spec, tcb_from);
+    CDL_Cap *from_vspace_root = get_cap_at(cdl_tcb_from, CDL_TCB_VTable_Slot);
+    CDL_ObjID from_pd = CDL_Cap_ObjID(from_vspace_root);
+
+    const char* elf_to = CDL_TCB_ElfName(cdl_tcb_to);
+    const char* elf_from = CDL_TCB_ElfName(cdl_tcb_from);
+
+    ZF_LOGD("from %s %x", elf_from, from_vaddr);
+    ZF_LOGD("to %s %x", elf_to, to_vaddr);
+
+
+    seL4_CPtr from_page = get_frame_cap(from_pd, from_vaddr, spec);
+    /* next_free_slot(); */
+    /* seL4_CPtr from_page_dup = get_free_slot(); */
+    /* int error_0 = seL4_CNode_Copy(seL4_CapInitThreadCNode, from_page_dup, CONFIG_WORD_SIZE, seL4_CapInitThreadCNode, from_page, CONFIG_WORD_SIZE, seL4_AllRights); */
+
+    seL4_CPtr to_page = get_frame_cap(to_pd, to_vaddr, spec);
+    /* next_free_slot(); */
+    /* seL4_CPtr to_page_dup = get_free_slot(); */
+    /* error_0 = seL4_CNode_Copy(seL4_CapInitThreadCNode, to_page_dup, CONFIG_WORD_SIZE, seL4_CapInitThreadCNode, to_page, CONFIG_WORD_SIZE, seL4_AllRights); */
+    /* if(error_0) ZF_LOGF("Boom"); */
+
+    seL4_CPtr from_page_pt = get_frame_pt(from_pd, from_vaddr, spec);
+    /* next_free_slot(); */
+    /* seL4_CPtr from_page_pt_dup = get_free_slot(); */
+    /* error_0 = seL4_CNode_Copy(seL4_CapInitThreadCNode, from_page_pt_dup, CONFIG_WORD_SIZE, seL4_CapInitThreadCNode, from_page_pt, CONFIG_WORD_SIZE, seL4_AllRights); */
+
+    seL4_CPtr to_page_pt = get_frame_pt(to_pd, to_vaddr, spec);
+    /* next_free_slot(); */
+    /* seL4_CPtr to_page_pt_dup = get_free_slot(); */
+    /* error_0 = seL4_CNode_Copy(seL4_CapInitThreadCNode, to_page_pt_dup, CONFIG_WORD_SIZE, seL4_CapInitThreadCNode, to_page_pt, CONFIG_WORD_SIZE, seL4_AllRights); */
+
+    size_t from_page_size = get_frame_size(from_pd, from_vaddr, spec);
+    size_t to_page_size = get_frame_size(to_pd, to_vaddr, spec);
+
+    ZF_LOGD("from page size is %d", from_page_size);
+    ZF_LOGD("to page size is %d", to_page_size);
+
+    int error = seL4_ARCH_Page_Map(from_page, seL4_CapInitThreadPD, (seL4_Word)copy_addr, seL4_ReadWrite, seL4_ARCH_Default_VMAttributes);
+    /* ZF_LOGF_IF(error, "Failed to map"); */
+    if (error == seL4_FailedLookup) {
+        error = seL4_ARCH_PageTable_Map(from_page_pt, seL4_CapInitThreadPD, (seL4_Word)copy_addr,
+                                        seL4_ARCH_Default_VMAttributes);
+        ZF_LOGF_IFERR(error, "");
+        error = seL4_ARCH_Page_Map(from_page, seL4_CapInitThreadPD, (seL4_Word)copy_addr,
+                                    seL4_ReadWrite, seL4_ARCH_Default_VMAttributes);
+        if(error) {
+            ZF_LOGF("Boom");
+        }
+    }
+
+    seL4_Word to_copy_addr = copy_addr + 2 * PAGE_SIZE_4K;
+
+    error = seL4_ARCH_Page_Map(to_page, seL4_CapInitThreadPD, (seL4_Word)to_copy_addr, seL4_ReadWrite, seL4_ARCH_Default_VMAttributes);
+    /* ZF_LOGF_IF(error, "Failed to map"); */
+    if (error == seL4_FailedLookup) {
+        error = seL4_ARCH_PageTable_Map(to_page_pt, seL4_CapInitThreadPD, (seL4_Word)to_copy_addr,
+                                        seL4_ARCH_Default_VMAttributes);
+        ZF_LOGF_IFERR(error, "");
+        error = seL4_ARCH_Page_Map(to_page, seL4_CapInitThreadPD, (seL4_Word)to_copy_addr,
+                                    seL4_ReadWrite, seL4_ARCH_Default_VMAttributes);
+        if(error) {
+            ZF_LOGF("Boom");
+        }
+    }
+
+    memcpy((void *) to_copy_addr, (void *) copy_addr, size);
+
+    error = seL4_ARCH_Page_Unmap(from_page);
+    error = seL4_ARCH_PageTable_Unmap(from_page_pt);
+
+    error = seL4_ARCH_Page_Unmap(to_page);
+    error = seL4_ARCH_PageTable_Unmap(to_page_pt);
+}
+
 
 static void
 init_elfs(CDL_Model *spec, seL4_BootInfo *bootinfo)
@@ -1264,15 +1419,13 @@ init_elfs(CDL_Model *spec, seL4_BootInfo *bootinfo)
                 (void*)((uintptr_t)ptr - (uintptr_t)_capdl_archive), size);
     }
 
-
-    // TODO: handle shared lib elfs here
-    // TODO: resolve symbol table issue here
     for (CDL_ObjID obj_id = 0; obj_id < spec->num; obj_id++) {
         if (spec->objects[obj_id].type == CDL_TCB) {
             ZF_LOGD(" Initialising ELF for %s...\n", CDL_Obj_Name(&spec->objects[obj_id]));
             init_elf(spec, obj_id, bootinfo);
         }
     }
+
 }
 
 static void
@@ -1348,9 +1501,14 @@ map_page(CDL_Model *spec UNUSED, CDL_Cap *page_cap, CDL_ObjID pd_id,
 {
     CDL_ObjID page = CDL_Cap_ObjID(page_cap);
 
+    /* if(vaddr < 0x415ff8 && vaddr + PAGE_SIZE_4K > 0x415ff8) { */
+        /* ZF_LOGD("BOOM"); */
+    /* } */
+
     // TODO: We should not be using the original cap here
     seL4_CPtr sel4_page = orig_caps(page);
     seL4_CPtr sel4_pd = orig_caps(pd_id);
+
 #ifdef CONFIG_CAPDL_LOADER_WRITEABLE_PAGES
     /* Make instruction pages writeable to support software breakpoints */
     if (seL4_CapRights_get_capAllowGrant(rights)) {
@@ -1455,6 +1613,7 @@ init_level_3(CDL_Model *spec, CDL_ObjID level_0_obj, uintptr_t level_3_base, CDL
         seL4_CapRights_t frame_rights = CDL_seL4_Cap_Rights(frame_cap);
         map_page(spec, frame_cap, level_0_obj, frame_rights, base);
     }
+
 }
 
 static void
@@ -1891,9 +2050,12 @@ init_system(CDL_Model *spec)
     init_irqs(spec);
     init_pd_asids(spec);
 
-    // TODO: Handle shared object elfs in init_elfs function
+    // NOTE: Handle shared object elfs in init_elfs function
     init_elfs(spec, bootinfo);
     init_fill_frames(spec, &simple);
+
+    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x415ff2, 0x1000, 0x15);
+
     init_vspace(spec);
     init_scs(spec);
     init_tcbs(spec);
@@ -1908,10 +2070,8 @@ main(void)
     /* Allow us to print via seL4_Debug_PutChar. */
     platsupport_serial_setup_bootinfo_failsafe();
     ZF_LOGD("Set up serial\n");
-    void* handle = dlopen("libshared.so", RTLD_NOW);
-    if (handle == NULL) {
-        ZF_LOGD("FAILED to load the shared lib\n");
-    }
+
+    muslcsys_install_cpio_interface(_capdl_archive, cpio_get_file);
 #endif
 
     ZF_LOGD("Starting Loader...\n");

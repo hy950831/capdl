@@ -16,8 +16,16 @@
 #define SIZED_SYMBOL(symbol, size, section) \
 	char symbol[size] VISIBLE ALIGN(4096) SECTION(section);
 
+#define FUNC_SYMBOL(symbol, type) \
+    type VISIBLE symbol();
+
 {% for (symbol, size, section) in symbols -%}
 SIZED_SYMBOL({{symbol}}, {{size}}, "{{section}}")
 {% endfor %}
 
-char progname[] = "{{progname}}";
+{% for (symbol, ty) in func_symbols -%}
+FUNC_SYMBOL({{symbol}}, {{ty}})
+{% endfor %}
+
+char VISIBLE progname_so[] = "{{progname}}";
+char VISIBLE progname[] = "{{progname}}";
