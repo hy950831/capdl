@@ -1284,11 +1284,9 @@ init_tcbs(CDL_Model *spec)
 }
 
 CDL_ObjID program_2_tcb;
-seL4_CPtr program_2_pd_dup;
 CDL_ObjID program_2_pd;
 
 CDL_ObjID shared_lib_tcb;
-seL4_CPtr shared_lib_pd_dup;
 CDL_ObjID shared_lib_pd;
 
 static void
@@ -1304,14 +1302,12 @@ init_elf(CDL_Model *spec, CDL_ObjID tcb, seL4_BootInfo *bootinfo)
         ZF_LOGD("It's program2, save the info needed for loading the shared libs");
         program_2_tcb = tcb;
         program_2_pd = CDL_Cap_ObjID(cdl_vspace_root);
-        program_2_pd_dup = dup_caps(program_2_pd);
     }
 
     if(strcmp(name, "tcb_shared") == 0) {
         ZF_LOGD("It's shared_lib, save the info needed for loading the shared libs");
         shared_lib_tcb = tcb;
         shared_lib_pd = CDL_Cap_ObjID(cdl_vspace_root);
-        shared_lib_pd_dup = dup_caps(shared_lib_pd);
     }
 
     ZF_LOGD("Init(Load) elf for %s", CDL_Obj_Name(cdl_tcb));
@@ -1337,7 +1333,6 @@ static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL
     ZF_LOGD("from %s %x", elf_from, from_vaddr);
     ZF_LOGD("to %s %x", elf_to, to_vaddr);
 
-
     seL4_CPtr from_page = get_frame_cap(from_pd, from_vaddr, spec);
     /* next_free_slot(); */
     /* seL4_CPtr from_page_dup = get_free_slot(); */
@@ -1362,8 +1357,8 @@ static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL
     size_t from_page_size = get_frame_size(from_pd, from_vaddr, spec);
     size_t to_page_size = get_frame_size(to_pd, to_vaddr, spec);
 
-    ZF_LOGD("from page size is %d", from_page_size);
-    ZF_LOGD("to page size is %d", to_page_size);
+    /* ZF_LOGD("from page size is %x", from_page_size); */
+    /* ZF_LOGD("to page size is %x", to_page_size); */
 
     int error = seL4_ARCH_Page_Map(from_page, seL4_CapInitThreadPD, (seL4_Word)copy_addr, seL4_ReadWrite, seL4_ARCH_Default_VMAttributes);
     /* ZF_LOGF_IF(error, "Failed to map"); */
@@ -1378,7 +1373,8 @@ static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL
         }
     }
 
-    seL4_Word to_copy_addr = copy_addr + 2 * PAGE_SIZE_4K;
+    /* char copy_buffer[PAGE_SIZE_4K]; */
+    seL4_Word to_copy_addr = copy_addr + PAGE_SIZE_4K;
 
     error = seL4_ARCH_Page_Map(to_page, seL4_CapInitThreadPD, (seL4_Word)to_copy_addr, seL4_ReadWrite, seL4_ARCH_Default_VMAttributes);
     /* ZF_LOGF_IF(error, "Failed to map"); */
@@ -1395,11 +1391,16 @@ static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL
 
     memcpy((void *) to_copy_addr, (void *) copy_addr, size);
 
+    int *test = 0;
+    test = (void*)copy_addr;
+    ZF_LOGD("test result %d", *test);
+
     error = seL4_ARCH_Page_Unmap(from_page);
     error = seL4_ARCH_PageTable_Unmap(from_page_pt);
 
     error = seL4_ARCH_Page_Unmap(to_page);
     error = seL4_ARCH_PageTable_Unmap(to_page_pt);
+
 }
 
 
@@ -1500,10 +1501,6 @@ map_page(CDL_Model *spec UNUSED, CDL_Cap *page_cap, CDL_ObjID pd_id,
          seL4_CapRights_t rights, seL4_Word vaddr)
 {
     CDL_ObjID page = CDL_Cap_ObjID(page_cap);
-
-    /* if(vaddr < 0x415ff8 && vaddr + PAGE_SIZE_4K > 0x415ff8) { */
-        /* ZF_LOGD("BOOM"); */
-    /* } */
 
     // TODO: We should not be using the original cap here
     seL4_CPtr sel4_page = orig_caps(page);
@@ -2050,11 +2047,13 @@ init_system(CDL_Model *spec)
     init_irqs(spec);
     init_pd_asids(spec);
 
-    // NOTE: Handle shared object elfs in init_elfs function
+    // XXX: Handle shared object elfs in init_elfs function
     init_elfs(spec, bootinfo);
     init_fill_frames(spec, &simple);
 
-    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x415ff2, 0x1000, 0x15);
+    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x1000, 0x15);
+
+    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x3000, 0x4); */
 
     init_vspace(spec);
     init_scs(spec);
