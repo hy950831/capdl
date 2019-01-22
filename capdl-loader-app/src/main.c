@@ -1389,6 +1389,8 @@ static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL
         }
     }
 
+    // TODO: Only copy non-text sections
+    // TODO: map the text section frame rather than copy
     memcpy((void *) to_copy_addr, (void *) copy_addr, size);
 
     int *test = 0;
@@ -2051,9 +2053,9 @@ init_system(CDL_Model *spec)
     init_elfs(spec, bootinfo);
     init_fill_frames(spec, &simple);
 
-    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x1000, 0x15);
-
-    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x3000, 0x4); */
+    // TODO: automatically do this process and generalise it
+    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x525000, 0x1000, 0x15);
+    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x3000, 0x4);
 
     init_vspace(spec);
     init_scs(spec);
