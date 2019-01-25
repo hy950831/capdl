@@ -2055,15 +2055,9 @@ init_system(CDL_Model *spec)
     init_fill_frames(spec, &simple);
 
     // TODO: automatically do this process and generalise it
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000 + 0x1000 * i, 0x1000 * i, 0x1000);
     }
-
-
-    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x2000, 0x1000); */
-    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x426000, 0x3000, 0x1000); */
-
-    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x3000, 0x4); */
 
     init_vspace(spec);
     init_scs(spec);

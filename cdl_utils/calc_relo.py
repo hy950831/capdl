@@ -1,5 +1,6 @@
 
 import os
+import argparse
 from jinja2 import Environment, BaseLoader, FileSystemLoader
 from elftools.elf.elffile import ELFFile
 
@@ -9,7 +10,7 @@ def main(shared_lib_name, program_name, output_name):
     offset = find_shared_lib_frame(program_name)
     f = open(shared_lib_name, 'rb')
     elf = ELFFile(f)
-    #  print(get_all_loadable_section(elf))
+
     symtab = elf.get_section_by_name('.symtab')
 
     symbols = []
@@ -24,6 +25,8 @@ def main(shared_lib_name, program_name, output_name):
         if t != 'STT_OBJECT' and t != 'STT_FUNC':
             continue
         if st_info['bind'] != 'STB_GLOBAL':
+            continue
+        if i.name == '_init' or i.name == '_fini':
             continue
 
         addr = i['st_value']
@@ -59,4 +62,14 @@ if __name__ == "__main__":
     # and then this program will calculate the relocation
     # for us and write to the symbol file
 
-    main('libshared.so', 'program_2', 'symbolfile')
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('prog', type=str)
+    parser.add_argument('so', type=str)
+    parser.add_argument('symbolfile', type=str)
+
+    print('in the calc relo script')
+
+    args = parser.parse_args()
+
+    main(args.so, args.prog, args.symbolfile)
