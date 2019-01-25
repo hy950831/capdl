@@ -97,6 +97,11 @@ def final_spec(cspaces, obj_space, addr_spaces, elf_files, architecture, so_file
 
         elf = ELF(e, name, architecture)
 
+        print("                                   ")
+        print(elf.get_symbol_vaddr('setTo10'))
+        print(elf.get_symbol_vaddr('doSet'))
+        print("                                   ")
+
         cspace = cspaces[name]
 
         print('the vspace root is ' + str(addr_spaces[name].vspace_root))

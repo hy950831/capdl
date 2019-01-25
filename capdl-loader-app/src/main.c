@@ -1393,9 +1393,10 @@ static void handle_so(CDL_Model *spec, CDL_ObjID tcb_to, CDL_ObjID tcb_from, seL
     // TODO: map the text section frame rather than copy
     memcpy((void *) to_copy_addr, (void *) copy_addr, size);
 
-    int *test = 0;
-    test = (void*)copy_addr;
-    ZF_LOGD("test result %d", *test);
+
+    /* int *test = 0; */
+    /* test = (void*)copy_addr; */
+    /* ZF_LOGD("test result %d", *test); */
 
     error = seL4_ARCH_Page_Unmap(from_page);
     error = seL4_ARCH_PageTable_Unmap(from_page_pt);
@@ -2054,8 +2055,15 @@ init_system(CDL_Model *spec)
     init_fill_frames(spec, &simple);
 
     // TODO: automatically do this process and generalise it
-    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x525000, 0x1000, 0x15);
-    handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x3000, 0x4);
+    for (int i = 0; i < 4; ++i) {
+        handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000 + 0x1000 * i, 0x1000 * i, 0x1000);
+    }
+
+
+    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x2000, 0x1000); */
+    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x426000, 0x3000, 0x1000); */
+
+    /* handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000, 0x3000, 0x4); */
 
     init_vspace(spec);
     init_scs(spec);

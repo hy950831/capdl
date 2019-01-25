@@ -27,5 +27,4 @@ SIZED_SYMBOL({{symbol}}, {{size}}, "{{section}}")
 FUNC_SYMBOL({{symbol}}, {{ty}})
 {% endfor %}
 
-char VISIBLE progname_so[] = "{{progname}}";
 char VISIBLE progname[] = "{{progname}}";
