@@ -54,7 +54,7 @@ def manifest(cap_symbols, region_symbols, architecture, targets):
             ccspace.write(data)
 
 
-def so_manifest(cap_symbols, region_symbols, architecture, targets, func_symbols):
+def so_manifest(cap_symbols, region_symbols, architecture, targets):
     """
     Generates a c file from CSPACE_TEMPLATE_FILE with some runtime information
     about CSpace slots and special address ranges
@@ -71,7 +71,6 @@ def so_manifest(cap_symbols, region_symbols, architecture, targets, func_symbols
         if ccspace:
             data = so_template.render({
                                     'symbols': region_symbols[name],
-                                    'func_symbols': func_symbols[name],
                                     'progname': name,
                                     'ipc_buffer_symbol': "mainIpcBuffer"})
             ccspace.write(data)
@@ -194,7 +193,7 @@ def main():
 
     args = parser.parse_args()
 
-    (objects, cspaces, addr_spaces, cap_symbols, region_symbols, elfs, func_symbols) = pickle.load(args.manifest_in)
+    (objects, cspaces, addr_spaces, cap_symbols, region_symbols, elfs) = pickle.load(args.manifest_in)
     if args.which is "build_cnode":
         elfs = [item for sublist in args.elffile for item in sublist]
         cspaces = [item for sublist in args.ccspace for item in sublist]
@@ -208,7 +207,7 @@ def main():
         sos = [item for sublist in args.sofile for item in sublist]
         so_cspaces = [item for sublist in args.socspace for item in sublist]
         so_targets = zip(sos, so_cspaces)
-        so_manifest(cap_symbols, region_symbols, args.architecture, so_targets, func_symbols)
+        so_manifest(cap_symbols, region_symbols, args.architecture, so_targets)
         return 0
 
     if args.which is "gen_cdl":
