@@ -63,7 +63,6 @@ if __name__ == "__main__":
     # for us and write to the symbol file
 
     parser = argparse.ArgumentParser()
-
     parser.add_argument('prog', type=str)
     parser.add_argument('so', type=str)
     parser.add_argument('symbolfile', type=str)

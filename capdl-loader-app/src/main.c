@@ -1284,10 +1284,7 @@ init_tcbs(CDL_Model *spec)
 }
 
 CDL_ObjID program_2_tcb;
-CDL_ObjID program_2_pd;
-
 CDL_ObjID shared_lib_tcb;
-CDL_ObjID shared_lib_pd;
 
 static void
 init_elf(CDL_Model *spec, CDL_ObjID tcb, seL4_BootInfo *bootinfo)
@@ -1301,13 +1298,11 @@ init_elf(CDL_Model *spec, CDL_ObjID tcb, seL4_BootInfo *bootinfo)
     if(strcmp(name, "tcb_program_2") == 0) {
         ZF_LOGD("It's program2, save the info needed for loading the shared libs");
         program_2_tcb = tcb;
-        program_2_pd = CDL_Cap_ObjID(cdl_vspace_root);
     }
 
     if(strcmp(name, "tcb_shared") == 0) {
         ZF_LOGD("It's shared_lib, save the info needed for loading the shared libs");
         shared_lib_tcb = tcb;
-        shared_lib_pd = CDL_Cap_ObjID(cdl_vspace_root);
     }
 
     ZF_LOGD("Init(Load) elf for %s", CDL_Obj_Name(cdl_tcb));
@@ -2012,6 +2007,8 @@ init_fill_frames(CDL_Model *spec, simple_t * simple)
     }
 }
 
+static void handle_link(CDL_Model *spec, CDL_Link_Model *link_spec);
+
 static void
 init_scs(CDL_Model *spec)
 {
@@ -2027,7 +2024,7 @@ init_scs(CDL_Model *spec)
 }
 
 static void
-init_system(CDL_Model *spec)
+init_system(CDL_Model *spec, CDL_Link_Model *link_spec)
 {
     seL4_BootInfo *bootinfo = platsupport_get_bootinfo();
     simple_t simple;
@@ -2055,15 +2052,58 @@ init_system(CDL_Model *spec)
     init_fill_frames(spec, &simple);
 
     // TODO: automatically do this process and generalise it
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 4; ++i) {
         handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000 + 0x1000 * i, 0x1000 * i, 0x1000);
     }
+
+    handle_link(spec, link_spec);
 
     init_vspace(spec);
     init_scs(spec);
     init_tcbs(spec);
     init_cspace(spec);
     start_threads(spec);
+}
+
+static CDL_ObjID find_tcb(const char* name, CDL_Model *spec);
+static CDL_ObjID find_tcb(const char* name, CDL_Model *spec) {
+    for (CDL_ObjID obj_id = 0; obj_id < spec->num; obj_id++) {
+        if (spec->objects[obj_id].type == CDL_TCB) {
+            if(strcmp(CDL_Obj_Name(&spec->objects[obj_id]), name) == 0) {
+                return obj_id;
+            }
+        }
+    }
+
+    return -1;
+}
+
+static void handle_link(CDL_Model *spec, CDL_Link_Model *link_spec) {
+    ZF_LOGD("Totally %d linking info provided", link_spec->num);
+
+    for (int i = 0; i < link_spec->num; ++i) {
+        const char* from = link_spec->objects[i].from;
+        const char* to = link_spec->objects[i].to;
+        const int size = link_spec->objects[i].size;
+        const int base = link_spec->objects[i].base;
+        ZF_LOGD("From %s to %s with the size of %d base is %x", from, to, size, base);
+
+        CDL_ObjID from_tcb = find_tcb(from, spec);
+        CDL_ObjID to_tcb = find_tcb(to, spec);
+
+        const char* fromname = CDL_Obj_Name(from_tcb);
+        const char* toname = CDL_Obj_Name(to_tcb);
+        ZF_LOGD("from id %d name %s", from_tcb, fromname);
+        ZF_LOGD("to id %d name %s", to_tcb, toname);
+
+        int turns = size / 0x1000;
+        int reminder = size % 0x1000;
+
+        for (int i = 0; i < turns; ++i) {
+        }
+    }
+
+    ZF_LOGF("STOP");
 }
 
 int
@@ -2073,12 +2113,10 @@ main(void)
     /* Allow us to print via seL4_Debug_PutChar. */
     platsupport_serial_setup_bootinfo_failsafe();
     ZF_LOGD("Set up serial\n");
-
-    muslcsys_install_cpio_interface(_capdl_archive, cpio_get_file);
 #endif
 
     ZF_LOGD("Starting Loader...\n");
-    init_system(&capdl_spec);
+    init_system(&capdl_spec, &capdl_link_spec);
 
     ZF_LOGD("We used %d CSlots (%.2LF%% of our CNode)\n", get_free_slot(),
             (long double)get_free_slot() /

@@ -13,9 +13,9 @@
 cmake_minimum_required(VERSION 3.7.2)
 
 function(BuildCapDLApplication)
-    cmake_parse_arguments(PARSE_ARGV 0 CAPDL_BUILD_APP "" "C_SPEC;OUTPUT" "ELF;DEPENDS")
+    cmake_parse_arguments(PARSE_ARGV 0 CAPDL_BUILD_APP "" "C_SPEC;L_SPEC;OUTPUT" "ELF;DEPENDS")
     if (NOT "${CAPDL_BUILD_APP_UNPARSED_ARGUMENTS}" STREQUAL "")
-        message(FATAL_ERROR "Unknown arguments to BuildCapDLApplication")
+        message(FATAL_ERROR "Unknown arguments to BuildCapDLApplication ${CAPDL_BUILD_APP_UNPARSED_ARGUMENTS}")
     endif()
     # Require a cspec and an output
     if ("${CAPDL_BUILD_APP_C_SPEC}" STREQUAL "")
@@ -34,6 +34,7 @@ function(BuildCapDLApplication)
         ${CAPDL_LOADER_APP_C_FILES}
         archive.o
         ${CAPDL_BUILD_APP_C_SPEC}
+        ${CAPDL_BUILD_APP_L_SPEC}
     )
     add_dependencies("${CAPDL_BUILD_APP_OUTPUT}" ${CAPDL_BUILD_APP_DEPENDS})
     target_include_directories("${CAPDL_BUILD_APP_OUTPUT}" PRIVATE $<TARGET_PROPERTY:capdl_app_properties,INCLUDE_DIRS>)

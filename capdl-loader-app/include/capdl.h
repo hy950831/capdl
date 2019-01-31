@@ -43,6 +43,7 @@
  * This type is used internally by capDL, and doesn't necessarily
  * reflect the representation of cap rights in the kernel api.
  */
+
 typedef enum {
     CDL_CanWrite = BIT(0),
     CDL_CanRead = BIT(1),
@@ -299,6 +300,19 @@ typedef struct {
 
     CDL_ObjID irqs[CONFIG_CAPDL_LOADER_MAX_IRQS];
 } CDL_Model;
+
+typedef struct {
+    const char* from;
+    const char* to;
+    const seL4_Word size;
+    const seL4_Word base;
+} CDL_Link_Object;
+
+typedef struct  {
+    const seL4_Word num;
+    CDL_Link_Object *objects;
+} CDL_Link_Model;
+
 
 /* helper functions ---------------------------------------------------------------------------- */
 

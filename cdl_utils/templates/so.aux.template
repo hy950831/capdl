@@ -1,0 +1,3 @@
+{% for (addr, to, index) in relos -%}
+int a{{index}} = {{to}};
+{% endfor %}
