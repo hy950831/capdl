@@ -364,20 +364,6 @@ void init_copy_frame(seL4_BootInfo *bootinfo)
     }
 }
 
-typedef struct shared_lib_frame {
-    CDL_ObjID pd;
-    void* elf_file;
-    unsigned long elf_size;
-    uintptr_t dest;
-    uintptr_t src;
-    seL4_CPtr sel4_page;
-    seL4_CPtr sel4_page_pt;
-    seL4_CPtr sel4_page_size;
-} shared_lib_frame_t;
-
-shared_lib_frame_t shared_frames[10];
-int num_shared_frames = 0;
-
 static void
 elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
                 seL4_BootInfo *bootinfo)
@@ -418,19 +404,6 @@ elf_load_frames(const char *elf_name, CDL_ObjID pd, CDL_Model *spec,
             seL4_CPtr sel4_page = get_frame_cap(pd, vaddr, spec);
             seL4_CPtr sel4_page_pt = get_frame_pt(pd, vaddr, spec);
             size_t sel4_page_size = get_frame_size(pd, vaddr, spec);
-
-
-            if(dest == 0x1000) {
-                ZF_LOGD("vaddr is 0x1000");
-                shared_frames[num_shared_frames].pd = pd;
-                shared_frames[num_shared_frames].elf_file = elf_file;
-                shared_frames[num_shared_frames].elf_size = elf_size;
-                shared_frames[num_shared_frames].dest = dest;
-                shared_frames[num_shared_frames].src = src;
-                shared_frames[num_shared_frames].sel4_page = sel4_page;
-                shared_frames[num_shared_frames].sel4_page_pt = sel4_page_pt;
-                shared_frames[num_shared_frames].sel4_page_size = sel4_page_size;
-            }
 
             seL4_ARCH_VMAttributes attribs = seL4_ARCH_Default_VMAttributes;
 #ifdef CONFIG_ARCH_ARM
@@ -1283,27 +1256,12 @@ init_tcbs(CDL_Model *spec)
     }
 }
 
-CDL_ObjID program_2_tcb;
-CDL_ObjID shared_lib_tcb;
-
 static void
 init_elf(CDL_Model *spec, CDL_ObjID tcb, seL4_BootInfo *bootinfo)
 {
     CDL_Object *cdl_tcb = get_spec_object(spec, tcb);
 
     CDL_Cap *cdl_vspace_root = get_cap_at(cdl_tcb, CDL_TCB_VTable_Slot);
-
-    const char* name = CDL_Obj_Name(cdl_tcb);
-
-    if(strcmp(name, "tcb_program_2") == 0) {
-        ZF_LOGD("It's program2, save the info needed for loading the shared libs");
-        program_2_tcb = tcb;
-    }
-
-    if(strcmp(name, "tcb_shared") == 0) {
-        ZF_LOGD("It's shared_lib, save the info needed for loading the shared libs");
-        shared_lib_tcb = tcb;
-    }
 
     ZF_LOGD("Init(Load) elf for %s", CDL_Obj_Name(cdl_tcb));
     if (cdl_vspace_root == NULL) {
@@ -2051,11 +2009,7 @@ init_system(CDL_Model *spec, CDL_Link_Model *link_spec)
     init_elfs(spec, bootinfo);
     init_fill_frames(spec, &simple);
 
-    // TODO: automatically do this process and generalise it
-    for (int i = 0; i < 4; ++i) {
-        handle_so(spec, program_2_tcb, shared_lib_tcb, 0x425000 + 0x1000 * i, 0x1000 * i, 0x1000);
-    }
-
+    // NOTE: this function handles shared library's mapping
     handle_link(spec, link_spec);
 
     init_vspace(spec);
@@ -2066,6 +2020,7 @@ init_system(CDL_Model *spec, CDL_Link_Model *link_spec)
 }
 
 static CDL_ObjID find_tcb(const char* name, CDL_Model *spec);
+
 static CDL_ObjID find_tcb(const char* name, CDL_Model *spec) {
     for (CDL_ObjID obj_id = 0; obj_id < spec->num; obj_id++) {
         if (spec->objects[obj_id].type == CDL_TCB) {
@@ -2075,7 +2030,7 @@ static CDL_ObjID find_tcb(const char* name, CDL_Model *spec) {
         }
     }
 
-    return -1;
+    return (CDL_ObjID)-1;
 }
 
 static void handle_link(CDL_Model *spec, CDL_Link_Model *link_spec) {
@@ -2084,15 +2039,19 @@ static void handle_link(CDL_Model *spec, CDL_Link_Model *link_spec) {
     for (int i = 0; i < link_spec->num; ++i) {
         const char* from = link_spec->objects[i].from;
         const char* to = link_spec->objects[i].to;
-        const int size = link_spec->objects[i].size;
-        const int base = link_spec->objects[i].base;
+        const seL4_Word size = link_spec->objects[i].size;
+        const seL4_Word base = link_spec->objects[i].base;
         ZF_LOGD("From %s to %s with the size of %d base is %x", from, to, size, base);
 
         CDL_ObjID from_tcb = find_tcb(from, spec);
         CDL_ObjID to_tcb = find_tcb(to, spec);
 
-        const char* fromname = CDL_Obj_Name(from_tcb);
-        const char* toname = CDL_Obj_Name(to_tcb);
+        if(from_tcb == -1) ZF_LOGF("WRONG");
+        if(to_tcb == -1) ZF_LOGF("WRONG");
+
+        const char* fromname = CDL_Obj_Name(&spec->objects[from_tcb]);
+        const char* toname = CDL_Obj_Name(&spec->objects[to_tcb]);
+
         ZF_LOGD("from id %d name %s", from_tcb, fromname);
         ZF_LOGD("to id %d name %s", to_tcb, toname);
 
@@ -2100,10 +2059,10 @@ static void handle_link(CDL_Model *spec, CDL_Link_Model *link_spec) {
         int reminder = size % 0x1000;
 
         for (int i = 0; i < turns; ++i) {
+            handle_so(spec, to_tcb, from_tcb, base + 0x1000 * i, 0x1000 * i, 0x1000);
         }
+        handle_so(spec, to_tcb, from_tcb, base + 0x1000 * turns, 0x1000 * turns, reminder);
     }
-
-    ZF_LOGF("STOP");
 }
 
 int
