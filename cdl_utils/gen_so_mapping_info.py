@@ -50,6 +50,7 @@ def find_shared_lib_frame(prog):
 if __name__ == "__main__":
     #  parser = argparse.ArgumentParser()
     #  parser.add_argument('prog', type=str)
+    main('program_1')
     main('program_2')
 
     template_file = open(LINK_INFO_TEMPLATE_FILE, 'r').read()
