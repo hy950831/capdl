@@ -48,10 +48,13 @@ def find_shared_lib_frame(prog):
 
 
 if __name__ == "__main__":
-    #  parser = argparse.ArgumentParser()
-    #  parser.add_argument('prog', type=str)
-    main('program_1')
-    main('program_2')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('prog', nargs='+')
+    args = parser.parse_args()
+
+    for i in args.prog:
+        name = os.path.basename(i)
+        main(name)
 
     template_file = open(LINK_INFO_TEMPLATE_FILE, 'r').read()
     template = Environment(loader=BaseLoader).from_string(template_file)
@@ -60,5 +63,5 @@ if __name__ == "__main__":
     data =template.render({'items':items, 'num': len(items)})
     print(data)
 
-    out = open('linking.spec.c', 'w')
+    out = open('link_spec.c', 'w')
     out.write(data)
