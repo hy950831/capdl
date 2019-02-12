@@ -17,6 +17,8 @@ def main(prog):
         if tag_type == 'DT_NEEDED':
             so = i.needed
             so_filename = os.path.basename(so)
+            if 'libc.' in so_filename:
+                continue
             handle_so(so_filename, elf, prog)
 
 
