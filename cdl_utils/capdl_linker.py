@@ -62,10 +62,7 @@ def so_manifest(cap_symbols, region_symbols, architecture, targets):
     so_temp_file = open(SO_CSPACE_TEMPLATE_FILE, 'r').read()
     so_template = Environment(loader=BaseLoader).from_string(so_temp_file)
 
-    print("In so_manifest function")
     for (e, ccspace) in targets:
-        print(e)
-        print(ccspace)
         name = os.path.basename(e)[3:-3]
 
         if ccspace:
